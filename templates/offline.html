@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Offline Encryptor</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        .container {
+            flex: 1;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 10px 0;
+            font-size: 14px;
+            color: #666;
+            border-top: 1px solid #ddd;
+            background-color: #f8f9fa;
+        }
+
+        .section {
+            display: none;
+        }
+
+        .active-section {
+            display: block;
+        }
+
+        .nav-link.active {
+            background-color: #007bff !important;
+            color: white !important;
+        }
+
+        .nav-link:hover {
+            background-color: #0056b3 !important;
+            color: white !important;
+            border-radius: 5px;
+        }
+
+        .nav-link {
+            width: 100%;
+        }
+
+        .result-box {
+            margin-top: 15px;
+            margin-bottom: 15px;
+            cursor: pointer;
+            border-radius: 8px;
+            color: #204d39;
+        }
+
+        .alert-warning {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        #qr-canvas {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Navigation Bar -->
+<nav class="navbar navbar-expand-lg navbar-light bg-light">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="#">0xeop Offline Encryptor</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav ms-auto">
+                <li class="nav-item">
+                    <a class="nav-link" href="/encrypt">Text Encrypt/Decrypt</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/file">File Encrypt/Decrypt</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/multi-key">Multi-Key Encrypt/Decrypt</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/notepad">Notepad</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/offline">Offline Mode</a>
+                </li>
+            </ul>
+        </div>
+    </div>
+</nav>
+
+<div class="container mt-5">
+    <div id="offlineEncryptSection" class="section active-section">
+        <div class="alert alert-info">
+            <strong>Offline Mode:</strong> All encryption and decryption are performed locally without internet access. Your data is never sent to a server.
+        </div>
+
+        <div class="mb-3">
+            <label for="offlineKey" class="form-label">Encryption Key</label>
+            <div class="input-group">
+                <input type="text" class="form-control" id="offlineKey" placeholder="Enter your key" required>
+                <button type="button" class="btn btn-outline-secondary" onclick="generateRandomKey()">Generate Key</button>
+            </div>
+        </div>
+
+        <div class="mb-3">
+            <label for="offlineText" class="form-label">Text to Encrypt/Decrypt</label>
+            <div class="input-group">
+                <textarea class="form-control" id="offlineText" rows="4" placeholder="Enter text here" required></textarea>
+                <!-- Button to trigger QR code upload -->
+                <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('qr-input').click()">Load QR Code</button>
+                <input type="file" id="qr-input" style="display: none;" accept="image/*">
+            </div>
+        </div>
+
+
+        <button type="button" class="btn btn-primary" onclick="encryptOffline()">Encrypt</button>
+        <button type="button" class="btn btn-secondary" onclick="decryptOffline()">Decrypt</button>
+
+        <div id="offlineResultContainer" class="result-box" style="display: none;">
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                <p id="resultKeyText"><strong>Key:</strong> </p>
+                <textarea id="offlineResultText" class="form-control" readonly style="height: 70px;"></textarea>
+                <button id="copy" class="btn btn-outline-secondary btn-sm mt-2" onclick="copyToClipboard()">Copy to Clipboard</button>
+                <button id="save" class="btn btn-outline-secondary btn-sm mt-2" onclick="saveAsTxt()">Save as TXT</button>
+                <button id="qr" class="btn btn-outline-secondary btn-sm mt-2" onclick="showQRCodeModal()">Save QR Code</button>
+
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="footer">
+    Offline Encryptor | 2024-2025
+</div>
+
+<canvas id="qr-canvas"></canvas>
+
+<!-- QR Code Modal -->
+<div class="modal fade" id="qrCodeModal" tabindex="-1" aria-labelledby="qrCodeModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="qrCodeModalLabel">QR Code</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center">
+                <!-- Display the encryption key -->
+                <p><strong>Key:</strong> <span id="qrCodeKey" style="color: #b5212f;"></span></p>
+                <img id="qrCodeImage" src="" alt="QR Code">
+                <p><strong>Reminder:</strong> Save the QR code and the key separately. Do not store them in the same place.</p>
+                <!-- Button to save QR code -->
+                <button class="btn btn-outline-secondary btn-sm" onclick="saveQRCode()">Save Encrypted QR Code</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.3.1/dist/jsQR.js"></script>
+
+<script>
+    function generateRandomKey() {
+        const randomKey = [...Array(32)].map(() => Math.random().toString(36)[2]).join('');
+        document.getElementById('offlineKey').value = randomKey;
+    }
+
+function resetResultDiv() {
+    const alertDiv = document.querySelector('#offlineResultContainer .alert');
+    alertDiv.classList.remove('alert-danger', 'alert-success');
+    document.getElementById('offlineResultText').value = '';
+    document.getElementById('resultKeyText').textContent = 'Key: ';
+    document.getElementById('offlineResultContainer').style.display = 'none';
+    // Reset button visibility
+    document.getElementById('copy').style.display = 'inline-block';
+    document.getElementById('save').style.display = 'inline-block';
+    document.getElementById('qr').style.display = 'inline-block';
+}
+
+function encryptOffline() {
+    resetResultDiv();
+    const text = document.getElementById('offlineText').value;
+    const key = document.getElementById('offlineKey').value;
+
+    if (!text || !key) {
+        alert('Text and key are required.');
+        return;
+    }
+
+    const hashedKey = CryptoJS.SHA256(key).toString(CryptoJS.enc.Hex).slice(0, 64);
+    const iv = CryptoJS.lib.WordArray.random(16);
+    const encrypted = CryptoJS.AES.encrypt(text, CryptoJS.enc.Hex.parse(hashedKey), {
+        iv: iv,
+        padding: CryptoJS.pad.Pkcs7,
+        mode: CryptoJS.mode.CBC,
+    });
+
+    const combined = iv.concat(encrypted.ciphertext);
+    const encryptedText = CryptoJS.enc.Base64.stringify(combined);
+
+    document.getElementById('offlineResultText').value = encryptedText;
+    document.getElementById('resultKeyText').innerHTML = `<strong>Key:</strong> ${key}`;
+    document.getElementById('offlineResultContainer').style.display = 'block';
+    const alertDiv = document.querySelector('#offlineResultContainer .alert');
+    alertDiv.classList.remove('alert-danger', 'alert-warning');
+    alertDiv.classList.add('alert-success');
+
+    // Show buttons in success mode
+    document.getElementById('copy').style.display = 'inline-block';
+    document.getElementById('save').style.display = 'inline-block';
+    document.getElementById('qr').style.display = 'inline-block';
+}
+
+function decryptOffline() {
+    resetResultDiv();
+    const encryptedText = document.getElementById('offlineText').value;
+    const key = document.getElementById('offlineKey').value;
+
+    if (!encryptedText || !key) {
+        alert('Encrypted text and key are required.');
+        return;
+    }
+
+    try {
+        const hashedKey = CryptoJS.SHA256(key).toString(CryptoJS.enc.Hex).slice(0, 64);
+        const combined = CryptoJS.enc.Base64.parse(encryptedText);
+        const iv = CryptoJS.lib.WordArray.create(combined.words.slice(0, 4), 16);
+        const ciphertext = CryptoJS.lib.WordArray.create(combined.words.slice(4));
+
+        const decryptedBytes = CryptoJS.AES.decrypt({ ciphertext: ciphertext }, CryptoJS.enc.Hex.parse(hashedKey), {
+            iv: iv,
+            padding: CryptoJS.pad.Pkcs7,
+            mode: CryptoJS.mode.CBC,
+        });
+
+        const decryptedText = decryptedBytes.toString(CryptoJS.enc.Utf8);
+
+        if (!decryptedText) {
+            throw new Error('Invalid key or corrupted data.');
+        }
+
+        document.getElementById('offlineResultText').value = decryptedText;
+        document.getElementById('resultKeyText').innerHTML = `<strong>Key:</strong> ${key}`;
+        document.getElementById('offlineResultContainer').style.display = 'block';
+        const alertDiv = document.querySelector('#offlineResultContainer .alert');
+        alertDiv.classList.remove('alert-danger', 'alert-warning');
+        alertDiv.classList.add('alert-success');
+
+        // Show buttons in success mode
+        document.getElementById('copy').style.display = 'inline-block';
+        document.getElementById('save').style.display = 'inline-block';
+        document.getElementById('qr').style.display = 'inline-block';
+    } catch (error) {
+        document.getElementById('offlineResultText').value = 'Decryption failed. Please check your key and try again.';
+        document.getElementById('offlineResultContainer').style.display = 'block';
+        const alertDiv = document.querySelector('#offlineResultContainer .alert');
+        alertDiv.classList.remove('alert-success');
+        alertDiv.classList.add('alert-danger');
+
+        // Hide buttons in error mode
+        document.getElementById('copy').style.display = 'none';
+        document.getElementById('save').style.display = 'none';
+        document.getElementById('qr').style.display = 'none';
+    }
+}
+
+
+
+
+
+    function copyToClipboard() {
+        const key = document.getElementById('offlineKey').value;
+        const resultText = document.getElementById('offlineResultText').value;
+
+        const contentToCopy = `Key: ${key}\nEncrypted: ${resultText}`;
+
+        const tempTextArea = document.createElement('textarea');
+        tempTextArea.value = contentToCopy;
+
+        document.body.appendChild(tempTextArea);
+        tempTextArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(tempTextArea);
+
+        alert('Content copied to clipboard!');
+    }
+
+    function saveAsTxt() {
+        const key = document.getElementById('offlineKey').value;
+        const resultText = document.getElementById('offlineResultText').value;
+
+        const content = `Key: ${key}\nEncrypted: ${resultText}`;
+
+        const date = new Date();
+        const formattedDate = date.toISOString().slice(0, 19).replace(/[-T:]/g, '_');
+        const filename = `offline_encrypted_${formattedDate}.txt`;
+
+        const blob = new Blob([content], { type: 'text/plain' });
+        const url = window.URL.createObjectURL(blob);
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    }
+
+    function showSection(sectionId) {
+        document.querySelectorAll('.section').forEach(section => section.style.display = 'none');
+        document.getElementById(sectionId).style.display = 'block';
+    }
+
+
+
+
+
+
+    // Function to show QR Code Modal and generate the QR code
+    function showQRCodeModal() {
+        const encryptedText = document.getElementById('offlineResultText').value;
+        const key = document.getElementById('offlineKey').value;
+
+        // Display the key in the modal
+        document.getElementById('qrCodeKey').textContent = key;
+
+        // Generate and display the QR code in the modal
+        generateQRCode(encryptedText);
+
+        // Show the QR Code modal
+        const qrCodeModal = new bootstrap.Modal(document.getElementById('qrCodeModal'));
+        qrCodeModal.show();
+    }
+
+    // Function to generate the QR code using qrcode library
+    function generateQRCode(data) {
+        // Create a canvas element to draw the QR code
+        const qrCanvas = document.createElement('canvas');
+
+        // Use qrcode library to create the QR code on the canvas
+        QRCode.toCanvas(qrCanvas, data, { errorCorrectionLevel: 'L' }, function (error) {
+            if (error) {
+                console.error('Error generating QR code:', error);
+                return;
+            }
+
+            // Convert the canvas to a data URL and set it to the image source
+            document.getElementById('qrCodeImage').src = qrCanvas.toDataURL();
+        });
+    }
+
+    // Function to save the generated QR code as an image
+    function saveQRCode() {
+        const qrImage = document.getElementById('qrCodeImage');
+        const link = document.createElement('a');
+        link.href = qrImage.src;
+        link.download = 'encrypted_qr_code.png';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+
+
+
+
+// QR code reader functionality
+        const qrInput = document.getElementById('qr-input');
+        const qrContent = document.getElementById('offlineText');
+        const qrCanvas = document.getElementById('qr-canvas');
+        const qrCanvasContext = qrCanvas.getContext('2d');
+
+        qrInput.addEventListener('change', (event) => {
+
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function() {
+                const img = new Image();
+                img.onload = function() {
+                    qrCanvas.width = img.width;
+                    qrCanvas.height = img.height;
+                    qrCanvasContext.drawImage(img, 0, 0, img.width, img.height);
+
+                    const imageData = qrCanvasContext.getImageData(0, 0, img.width, img.height);
+                    const code = jsQR(imageData.data, img.width, img.height);
+
+                    if (code) {
+                        clearForm();
+                        qrContent.value = code.data;
+                    } else {
+                        alert('No QR code found. Please try another image.');
+                    }
+                };
+                img.src = reader.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+
+
+    function clearForm() {
+    // Get all input elements including textareas
+    const inputs = document.querySelectorAll('input, textarea');
+
+    // Loop through each input element and clear its value
+    inputs.forEach(input => {
+        if (input.type === 'file') {
+            input.value = ''; // Clear file input
+        } else {
+            input.value = ''; // Clear text, number, email, etc.
+        }
+    });
+
+    // Clear any specific container elements that need to be reset
+    const resultContainer = document.getElementById('offlineResultContainer');
+    if (resultContainer) {
+        resultContainer.style.display = 'none'; // Hide the result container
+        resultContainer.classList.remove('alert-danger', 'alert-success'); // Remove any alert classes
+    }
+
+    // Reset any alert or result divs
+    const resultText = document.getElementById('offlineResultText');
+    if (resultText) {
+        resultText.value = ''; // Clear the result textarea if exists
+    }
+
+    // If there are specific fields like showing key text, clear those as well
+    const resultKeyText = document.getElementById('resultKeyText');
+    if (resultKeyText) {
+        resultKeyText.innerHTML = '<strong>Key:</strong>'; // Reset key display text
+    }
+}
+</script>
+
+</body>
+</html>
