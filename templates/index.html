@@ -140,7 +140,7 @@
     {% endif %}
     {% endwith %}
 
-    <!-- QR Code Modal -->
+<!-- QR Code Modal -->
 <div class="modal fade" id="qrCodeModal" tabindex="-1" aria-labelledby="qrCodeModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -153,12 +153,13 @@
                 <p><strong>Key:</strong> <span id="qrCodeKey" style="color: #b5212f;"></span></p>
                 <img id="qrCodeImage" src="" alt="QR Code">
                 <p><strong>Reminder:</strong> Save the QR code and the key separately. Do not store them in the same place.</p>
-                <button class="btn btn-outline-secondary" onclick="saveQRCode()">Save QR Code</button>
+                <!-- Buttons for saving QR codes -->
+                <button class="btn btn-outline-secondary btn-sm" onclick="saveQRCode()">Save Encrypted QR Code</button>
+                <button class="btn btn-outline-secondary btn-sm" onclick="saveEncryptedQRCode()">Save Encrypted & Key QR Code</button>
             </div>
         </div>
     </div>
 </div>
-
 
     <input type="hidden" id="sitValue" value="{{ sit }}">
 </div>
@@ -240,35 +241,57 @@
     }
 
     const qrInput = document.getElementById('qr-input');
-    const qrContent = document.getElementById('text');
-    const qrCanvas = document.getElementById('qr-canvas');
-    const qrCanvasContext = qrCanvas.getContext('2d');
+const qrContent = document.getElementById('text');
+const keyInput = document.getElementById('key'); // Get the key input element
+const qrCanvas = document.getElementById('qr-canvas');
+const qrCanvasContext = qrCanvas.getContext('2d');
 
-        qrInput.addEventListener('change', (event) => {
-            const file = event.target.files[0];
-            if (!file) return;
+qrInput.addEventListener('change', (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
 
-            const reader = new FileReader();
-            reader.onload = function() {
-                const img = new Image();
-                img.onload = function() {
-                    qrCanvas.width = img.width;
-                    qrCanvas.height = img.height;
-                    qrCanvasContext.drawImage(img, 0, 0, img.width, img.height);
+    const reader = new FileReader();
+    reader.onload = function() {
+        const img = new Image();
+        img.onload = function() {
+            qrCanvas.width = img.width;
+            qrCanvas.height = img.height;
+            qrCanvasContext.drawImage(img, 0, 0, img.width, img.height);
 
-                    const imageData = qrCanvasContext.getImageData(0, 0, img.width, img.height);
-                    const code = jsQR(imageData.data, img.width, img.height);
+            const imageData = qrCanvasContext.getImageData(0, 0, img.width, img.height);
+            const code = jsQR(imageData.data, img.width, img.height);
 
-                    if (code) {
-                        qrContent.value = code.data;
+            if (code) {
+                // Send the QR code data to the backend for decryption
+                fetch('/decrypt_qr', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ data: code.data }),
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        keyInput.value = data.key || ''; // Set the key if present
+                        qrContent.value = data.encrypted; // Set the encrypted text
                     } else {
-                        alert('No QR code found. Please try another image.');
+                        alert(data.message || 'Failed to decrypt the QR code.');
                     }
-                };
-                img.src = reader.result;
-            };
-            reader.readAsDataURL(file);
-        });
+                })
+                .catch(error => {
+                    console.error('Error decrypting QR code:', error);
+                    alert('An error occurred while decrypting the QR code.');
+                });
+            } else {
+                alert('No QR code found. Please try another image.');
+            }
+        };
+        img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+});
+
 
 
     function copyToClipboard() {
@@ -331,6 +354,40 @@
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
     }
+
+
+    function saveEncryptedQRCode() {
+    const key = document.getElementById('qrCodeKey').textContent;
+    const encrypted = document.getElementById('resultText').value;
+
+    // Prepare JSON data with key and encrypted content
+    const data = {
+        key: key,
+        encrypted: encrypted
+    };
+
+    // Send the data to the backend for encryption and QR code generation
+    fetch('/generate_encrypted_qr', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+    })
+    .then(response => response.blob())
+    .then(blob => {
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = 'encrypted_key_qr_code.png';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    })
+    .catch(error => {
+        console.error('Error generating encrypted QR code:', error);
+    });
+}
+
 </script>
 
 </body>
