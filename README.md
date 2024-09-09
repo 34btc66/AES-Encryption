@@ -79,11 +79,11 @@ Before you begin, ensure you have the following installed on your computer:
    flask run
    ```
 
-   The app will start, and you can access it at `http://127.0.0.1:5000/` in your web browser.
+   The app will start, and you can access it at `http://127.0.0.1:5050/` in your web browser.
 
 ### Using the Application
 
-1. **Accessing the App**: Open your browser and navigate to `http://127.0.0.1:5000/`.
+1. **Accessing the App**: Open your browser and navigate to `http://127.0.0.1:5050/`.
 2. **Creating and Managing Notes**: Use the navigation links to create new notes or open existing encrypted notes.
 3. **Encrypting/Decrypting Text and Files**: Use the respective sections to encrypt or decrypt data with your specified key.
 4. **QR Code Features**: Generate QR codes for encrypted content and import QR codes to decrypt data securely.
@@ -91,7 +91,7 @@ Before you begin, ensure you have the following installed on your computer:
 ### Troubleshooting
 
 - **Missing Dependencies**: Ensure the virtual environment is activated before installing dependencies.
-- **Port in Use**: If the default port is busy, use `flask run --port=5050` to start the app on a different port.
+- **Port in Use**: If the default port is busy, use `flask run --port=5051` to start the app on a different port.
 - **Python Version Compatibility**: Ensure you're using Python 3.10 or above.
 
 ### Security Note
