@@ -1,3 +1,5 @@
+import json
+
 import qrcode
 from flask import Flask, render_template, request, flash, redirect, url_for, send_file, session, jsonify
 from Crypto.Cipher import AES
@@ -319,5 +321,94 @@ def save_note():
     return send_file(file_bytes, as_attachment=True, download_name=filename, mimetype='text/plain')
 
 
+PREDEFINED_KEY = "@xqy4to6cpinqr8e5l3iue6z7we6bfr13".ljust(32)[:32].encode('utf-8')  # Make sure the key is 32 bytes long for AES
+
+def encrypt_data(data: str, key: bytes) -> str:
+    cipher = AES.new(key, AES.MODE_CBC)
+    iv = cipher.iv
+    encrypted_data = cipher.encrypt(pad(data.encode('utf-8'), AES.block_size))
+    return base64.b64encode(iv + encrypted_data).decode('utf-8')
+
+@app.route('/generate_encrypted_qr', methods=['POST'])
+def generate_encrypted_qr():
+    try:
+        content = request.json
+        key = content.get('key')
+        encrypted_content = content.get('encrypted')
+
+        # Create the JSON object
+        data = {
+            'key': key,
+            'encrypted': encrypted_content
+        }
+
+        # Convert the JSON object to a string and encrypt it using the server-side key
+        json_data = json.dumps(data)
+        encrypted_json = encrypt_data(json_data, PREDEFINED_KEY)
+
+        # Generate the QR code with the encrypted JSON
+        qr = QRCode(
+            error_correction=qrcode.constants.ERROR_CORRECT_L,
+            box_size=10,
+            border=4,
+        )
+        qr.add_data(encrypted_json)
+        qr.make(fit=True)
+
+        img = qr.make_image(fill_color="black", back_color="white")
+        img_bytes = BytesIO()
+        img.save(img_bytes)
+        img_bytes.seek(0)
+
+        return send_file(img_bytes, mimetype='image/png')
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/decrypt_qr', methods=['POST'])
+def decrypt_qr():
+    data = request.json.get('data')
+    if not data:
+        return jsonify({"success": False, "message": "No data provided for decryption."})
+
+    # Check if data is a Base64 encoded JSON object
+    try:
+        # Attempt to parse as JSON without decryption
+        possible_json = json.loads(data)
+        # If parsing is successful and contains plain text
+        return jsonify({"success": True, "encrypted": data})
+    except json.JSONDecodeError:
+        pass
+
+    # Attempt decryption if data is not plain JSON
+    try:
+        decoded_data = base64.b64decode(data)
+        iv = decoded_data[:16]
+        encrypted_data = decoded_data[16:]
+
+        cipher = AES.new(PREDEFINED_KEY, AES.MODE_CBC, iv)
+        decrypted_bytes = unpad(cipher.decrypt(encrypted_data), AES.block_size)
+        decrypted_text = decrypted_bytes.decode('utf-8')
+
+        # Attempt to parse decrypted text as JSON
+        try:
+            decrypted_json = json.loads(decrypted_text)
+            # Check if JSON contains both 'key' and 'encrypted'
+            if 'key' in decrypted_json and 'encrypted' in decrypted_json:
+                return jsonify({
+                    "success": True,
+                    "key": decrypted_json['key'],
+                    "encrypted": decrypted_json['encrypted']
+                })
+        except json.JSONDecodeError:
+            # If JSON decoding fails, treat as plain text
+            return jsonify({"success": True, "encrypted": decrypted_text})
+
+    except (ValueError, Exception) as e:
+        # If the decryption fails or padding is incorrect, treat data as plain text
+        print(f"Error processing QR code: {str(e)}")
+        return jsonify({"success": True, "encrypted": data})
+
+    return jsonify({"success": False, "message": "Failed to process the QR code."})
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5050, debug=True)
