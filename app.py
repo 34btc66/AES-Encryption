@@ -1,3 +1,4 @@
+import hashlib
 import json
 
 import qrcode
@@ -8,7 +9,7 @@ from Crypto.Random import get_random_bytes
 import base64
 from io import BytesIO
 import zipfile
-from datetime import datetime
+from datetime import datetime, timedelta
 from hashlib import sha256
 
 from qrcode.main import QRCode
@@ -18,20 +19,21 @@ app.secret_key = '@Zil1992'  # Replace with your own secret key for Flask
 
 class Encryptor:
     def __init__(self, key: str):
-        # Hash the key to ensure consistent key length and uniqueness
-        self.key = sha256(key.encode('utf-8')).digest()[:32]  # Use the first 32 bytes of the SHA-256 hash
+        self.key = hashlib.sha256(key.encode('utf-8')).digest()[:32]
 
     def encrypt_text(self, plaintext: str) -> str:
         plaintext_bytes = plaintext.encode('utf-8')
         iv = get_random_bytes(16)
         cipher = AES.new(self.key, AES.MODE_CBC, iv)
         encrypted_bytes = cipher.encrypt(pad(plaintext_bytes, AES.block_size))
-        encrypted_data = base64.b64encode(iv + encrypted_bytes).decode('utf-8')
+        # Use URL-safe Base64 encoding
+        encrypted_data = base64.urlsafe_b64encode(iv + encrypted_bytes).decode('utf-8')
         return encrypted_data
 
     def decrypt_text(self, encrypted_data: str) -> str:
         try:
-            encrypted_data_bytes = base64.b64decode(encrypted_data)
+            # Use URL-safe Base64 decoding
+            encrypted_data_bytes = base64.urlsafe_b64decode(encrypted_data)
             iv = encrypted_data_bytes[:16]
             encrypted_bytes = encrypted_data_bytes[16:]
             cipher = AES.new(self.key, AES.MODE_CBC, iv)
@@ -196,8 +198,8 @@ class MultiKeyEncryptor:
                 # Show the original key instead of the hash
                 result_info.append(f"Key {index}: {original_key}")
 
-            # Encode the fully encrypted data to Base64
-            encrypted_result = base64.b64encode(encrypted_data).decode('utf-8')
+            # Encode the fully encrypted data to URL-safe Base64
+            encrypted_result = base64.urlsafe_b64encode(encrypted_data).decode('utf-8')
             result_info.append(f"Encrypted: {encrypted_result}")
             return '\n'.join(result_info)
 
@@ -206,7 +208,8 @@ class MultiKeyEncryptor:
 
     def decrypt_text(self, encrypted_data: str) -> str:
         try:
-            encrypted_data_bytes = base64.b64decode(encrypted_data)
+            # Use URL-safe Base64 decoding
+            encrypted_data_bytes = base64.urlsafe_b64decode(encrypted_data)
 
             # Sequentially decrypt using the hashed keys in reverse order
             for key in reversed(self.keys):
@@ -257,7 +260,9 @@ def multi_key_encrypt_decrypt():
     return render_template('multi_key.html', sit=sit or '')
 
 
-
+@app.route('/offline')
+def offline():
+    return render_template('offline.html')
 
 @app.route('/notepad', methods=['GET', 'POST'])
 def notepad():
@@ -410,5 +415,78 @@ def decrypt_qr():
         return jsonify({"success": True, "encrypted": data})
 
     return jsonify({"success": False, "message": "Failed to process the QR code."})
+
+
+# Secret server-side key used only for the extra encryption layer
+SERVER_SIDE_KEY = hashlib.sha256("@8z78r5dc3i4q8a4wg3fz00luwu1i9xcs@".encode('utf-8')).digest()[:32]
+
+# Helper function to encrypt the JSON object with SERVER_SIDE_KEY
+def secure_encrypt(data: dict) -> str:
+    json_data = json.dumps(data).encode('utf-8')
+    iv = get_random_bytes(16)
+    cipher = AES.new(SERVER_SIDE_KEY, AES.MODE_CBC, iv)
+    encrypted_data = cipher.encrypt(pad(json_data, AES.block_size))
+    return base64.urlsafe_b64encode(iv + encrypted_data).decode('utf-8')
+
+# Helper function to decrypt the JSON object with SERVER_SIDE_KEY
+def secure_decrypt(encrypted_data: str) -> dict:
+    try:
+        encrypted_data_bytes = base64.urlsafe_b64decode(encrypted_data)
+        iv = encrypted_data_bytes[:16]
+        encrypted_bytes = encrypted_data_bytes[16:]
+        cipher = AES.new(SERVER_SIDE_KEY, AES.MODE_CBC, iv)
+        decrypted_bytes = unpad(cipher.decrypt(encrypted_bytes), AES.block_size)
+        return json.loads(decrypted_bytes.decode('utf-8'))
+    except Exception as e:
+        raise ValueError("Failed to process the link. Please check the URL.")
+
+@app.route('/generate_url', methods=['POST'])
+def generate_url():
+    data = request.json.get('data')
+    key = request.json.get('key')
+    if not data or not key:
+        return jsonify({'success': False, 'message': 'No data provided for URL generation.'})
+
+    encryptor = Encryptor(key)
+    encrypted_data = encryptor.encrypt_text(data)
+
+    # Secure the entire JSON object with the server-side encryption layer
+    secure_data = secure_encrypt({"encrypted": encrypted_data, "key": key})
+
+    # Generate a link with the secure encrypted data
+    generated_url = url_for('decrypt_url', encoded_data=secure_data, _external=True)
+    return jsonify({'success': True, 'url': generated_url})
+
+@app.route('/decrypt/<encoded_data>', methods=['GET', 'POST'])
+def decrypt_url(encoded_data):
+    try:
+        # First, decrypt the encoded_data with the server-side key
+        secure_data = secure_decrypt(encoded_data)
+        encrypted_text = secure_data['encrypted']
+        key = secure_data['key']
+
+        if request.method == 'POST':
+            input_key = request.form.get('key')
+            if not input_key or input_key != key:
+                return render_template('decrypt.html', error="Invalid key. Decryption failed.", encoded_data=encoded_data)
+
+            encryptor = Encryptor(input_key)
+            first_decryption = encryptor.decrypt_text(encrypted_text)
+            if first_decryption.startswith('* Decryption Error'):
+                return render_template('decrypt.html', error="Decryption failed. Check the key.",
+                                       encoded_data=encoded_data)
+            second_decryption = encryptor.decrypt_text(first_decryption)
+            if second_decryption.startswith('* Decryption Error'):
+                return render_template('decrypt.html', error="Decryption failed. Check the key.",
+                                       encoded_data=encoded_data)
+
+            decrypted_content = second_decryption
+            return render_template('decrypt.html', content=decrypted_content)
+
+        return render_template('decrypt.html', encoded_data=encoded_data)
+    except ValueError as e:
+        return render_template('decrypt.html', error=str(e))
+
+
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5050, debug=True)
