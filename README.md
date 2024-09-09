@@ -94,7 +94,7 @@ Before you begin, ensure you have the following installed on your computer:
 - **Port in Use**: If the default port is busy, use `flask run --port=5051` to start the app on a different port.
 - **Python Version Compatibility**: Ensure you're using Python 3.10 or above.
 
-### Security Note
+### Security Notes
 
 Keep your encryption keys secure and never share them. This application does not log or store any keys or data; always back up your keys and encrypted data safely.
 
